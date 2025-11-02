@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>IMG Buddy — Resize • Crop • Compress • Convert (local)</title>
   <meta name="description" content="Petit outil tout-en-un pour redimensionner, recadrer, compresser et convertir des images — 100% en local, sans upload." />
+  <link rel="icon" href="favicon.png" type="image/png">
   <!-- Cropper.js (CDN, aucune compilation) -->
   <link href="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/cropperjs@1.6.2/dist/cropper.min.js"></script>
@@ -57,6 +58,13 @@
     .hint { font-size: 11px; color:#94a3b8; }
     .footer { padding:12px 16px; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; gap:12px; }
     .link { color:#a5b4fc; text-decoration: underline; cursor: pointer; }
+
+    footer {
+      padding: 16px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--muted);
+    }
   </style>
 </head>
 <body>
@@ -168,7 +176,7 @@
     </main>
   </div>
   <footer>
-    <p>IMG Buddy — Resize • Crop • Compress • Convert (local)</p>
+    <p>IMG Buddy — Resize • Crop • Compress • Convert</p>
     <p>© 2025 <a href="https://gregoireboisseau.fr">Gregoire Boisseau</a></p>
   </footer>
 
