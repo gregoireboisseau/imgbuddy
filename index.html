@@ -30,7 +30,7 @@
     header h1 { font-size: 18px; margin: 0; letter-spacing: .2px; }
     header .badge { font-size: 12px; color: #a3a3a3; border:1px solid var(--border); padding:2px 8px; border-radius: 999px; }
 
-    .wrap { display:grid; grid-template-columns: 360px 1fr; gap: 16px; height: calc(100% - 64px); }
+    .wrap { display:grid; grid-template-columns: 360px 1fr; gap: 16px; height: calc(100% - 64px - 60px); }
     .sidebar { padding:16px; overflow:auto; background: var(--panel); border-right:1px solid var(--border); }
     .section { margin-bottom:16px; padding:12px; border:1px solid var(--border); border-radius:12px; background:#0f1217; }
     .section h3 { margin:0 0 8px; font-size:14px; color:#cbd5e1; }
@@ -60,10 +60,17 @@
     .link { color:#a5b4fc; text-decoration: underline; cursor: pointer; }
 
     footer {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
       padding: 16px;
       text-align: center;
       font-size: 12px;
       color: var(--muted);
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+      z-index: 10;
     }
   </style>
 </head>
@@ -127,7 +134,7 @@
           <option value="image/webp">WEBP</option>
           <option value="image/jpeg">JPG</option>
           <option value="image/png">PNG</option>
-          <!-- ICO option non incluse par défaut (voir note en bas) -->
+          <option value="image/x-icon">ICO (multi-tailles)</option>
         </select>
         <div style="height:8px"></div>
         <label>Qualité (perte) — JPG/WEBP</label>
@@ -147,18 +154,16 @@
       </div>
 
       <div class="section">
-        <h3>Batch (optionnel, simple)</h3>
-        <p class="muted">Tu peux déposer plusieurs fichiers: même réglages appliqués à chacun, en sortie dans un zip.</p>
-        <input id="batch" type="file" accept="image/*" multiple />
-        <div style="height:8px"></div>
-        <button class="btn" id="btnBatch">Exporter le lot (.zip)</button>
+        <h3>Générateur d'icônes PWA</h3>
+        <p class="muted">Génère tous les fichiers PNG (16-512px) + favicon.ico multi-tailles dans un ZIP.</p>
+        <button class="btn-accent" id="btnIco">Générer icônes PWA (.zip)</button>
       </div>
 
       <div class="section">
         <h3>Notes</h3>
         <ul class="muted">
           <li>Tous les traitements sont faits dans ton navigateur, rien n'est envoyé.</li>
-          <li>ICO: aujourd'hui les navigateurs acceptent le PNG pour les favicons. Si tu as absolument besoin d'un .ico multi‑tailles, je peux ajouter un encodeur léger.</li>
+          <li>Pour toute demande d'ajout, contacte moi sur <a href="https://github.com/gregoireboisseau/imgbuddy" target="_blank">GitHub</a>.</li>
         </ul>
       </div>
     </aside>
@@ -176,8 +181,7 @@
     </main>
   </div>
   <footer>
-    <p>IMG Buddy — Resize • Crop • Compress • Convert</p>
-    <p>© 2025 <a href="https://gregoireboisseau.fr">Gregoire Boisseau</a></p>
+    <p>IMG Buddy — Resize • Crop • Compress • Convert — © 2025 <a href="https://gregoireboisseau.fr">Gregoire Boisseau</a></p>
   </footer>
 
 <script>
@@ -256,6 +260,29 @@ function drawResized(canvasIn, w, h, lockRatio){
 }
 
 async function exportBlob(cnv, mime, quality, bg){
+  if(mime === 'image/x-icon'){
+    // Generate ICO with common sizes
+    const sizes = [16, 32, 48, 64];
+    const icoImages = [];
+
+    for(const size of sizes){
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(cnv, 0, 0, size, size);
+
+      const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+      const arrayBuffer = await blob.arrayBuffer();
+      const pngData = new Uint8Array(arrayBuffer);
+      icoImages.push({size, data: pngData});
+    }
+
+    return await generateICOFromImages(icoImages);
+  }
+
   if(mime === 'image/jpeg' || mime === 'image/webp'){
     // handle background for transparency if needed
     if(mime==='image/jpeg'){
@@ -282,8 +309,81 @@ function downloadBlob(blob, filename){
 }
 
 function buildOutName(base, mime){
-  const ext = mime==='image/png' ? 'png' : mime==='image/jpeg' ? 'jpg' : mime==='image/webp' ? 'webp' : 'png';
+  const ext = mime==='image/png' ? 'png' : mime==='image/jpeg' ? 'jpg' : mime==='image/webp' ? 'webp' : mime==='image/x-icon' ? 'ico' : 'png';
   return `${base||originalName}.${ext}`;
+}
+
+// PWA Icons Generator - generates all sizes as PNG files + ICO
+async function generatePWAIcons(sourceCanvas){
+  // All standard PWA icon sizes
+  const sizes = [16, 32, 48, 64, 72, 96, 128, 144, 192, 256, 512];
+
+  // Create PNG files for each size
+  const files = [];
+  const icoImages = [];
+
+  for(const size of sizes){
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(sourceCanvas, 0, 0, size, size);
+
+    // Convert to PNG blob
+    const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+    const filename = `icon-${size}x${size}.png`;
+    files.push(new File([blob], filename, {type: 'image/png'}));
+
+    // Keep data for ICO (only sizes that fit well in ICO format)
+    if(size <= 256){
+      const arrayBuffer = await blob.arrayBuffer();
+      const pngData = new Uint8Array(arrayBuffer);
+      icoImages.push({size, data: pngData});
+    }
+  }
+
+  // Generate ICO file with multiple sizes
+  const icoBlob = await generateICOFromImages(icoImages);
+  files.push(new File([icoBlob], 'favicon.ico', {type: 'image/x-icon'}));
+
+  return files;
+}
+
+// Generate ICO file from PNG data
+async function generateICOFromImages(images){
+  // Build ICO file structure
+  // ICO Header: 6 bytes
+  const header = new Uint8Array(6);
+  const headerView = new DataView(header.buffer);
+  headerView.setUint16(0, 0, true);      // Reserved (must be 0)
+  headerView.setUint16(2, 1, true);      // Type (1 = ICO)
+  headerView.setUint16(4, images.length, true); // Number of images
+
+  // Directory entries: 16 bytes each
+  const dirEntries = [];
+  let dataOffset = 6 + (images.length * 16);
+
+  for(const img of images){
+    const entry = new Uint8Array(16);
+    const view = new DataView(entry.buffer);
+    view.setUint8(0, img.size === 256 ? 0 : img.size);  // Width (0 means 256)
+    view.setUint8(1, img.size === 256 ? 0 : img.size);  // Height (0 means 256)
+    view.setUint8(2, 0);                 // Color palette (0 for PNG)
+    view.setUint8(3, 0);                 // Reserved
+    view.setUint16(4, 1, true);          // Color planes
+    view.setUint16(6, 32, true);         // Bits per pixel
+    view.setUint32(8, img.data.length, true);  // Size of image data
+    view.setUint32(12, dataOffset, true);      // Offset to image data
+    dirEntries.push(entry);
+    dataOffset += img.data.length;
+  }
+
+  // Combine all parts
+  const parts = [header, ...dirEntries, ...images.map(img => img.data)];
+  const blob = new Blob(parts, {type: 'image/x-icon'});
+  return blob;
 }
 
 async function pipelineOne(fileOrCanvas){
@@ -380,15 +480,14 @@ el('btnExport').addEventListener('click', async ()=>{
   downloadBlob(blob, file);
 });
 
-// Batch simple
-el('btnBatch').addEventListener('click', async ()=>{
-  const input = el('batch');
-  if(!input.files || input.files.length===0){ alert('Sélectionne d\'abord plusieurs images.'); return; }
-  const files = Array.from(input.files);
-  // Use a minimal zip writer (no external lib): store only (no compression), simple ZIP spec
+// PWA Icons Generator
+el('btnIco').addEventListener('click', async ()=>{
+  if(!cropper){ alert('Charge une image d\'abord.'); return; }
+  const cropped = getCurrentCanvas();
+  const pwaFiles = await generatePWAIcons(cropped);
+
+  // Use the same zip function as batch
   function zipBlob(files){
-    // VERY minimal ZIP (store), for small batches.
-    // Credit: adapted from public-domain snippets (no deps).
     const enc = new TextEncoder();
     const fileRecs = [];
     let offset = 0;
@@ -400,20 +499,15 @@ el('btnBatch').addEventListener('click', async ()=>{
       return {time, date: datev};
     }
     return Promise.all(files.map(async f=>{
-      const name = f.name.replace(/\\//g,'_');
+      const name = f.name.replace(/\//g,'_');
       const data = new Uint8Array(await f.arrayBuffer());
       const crc = crc32(data);
       const {time, date} = dosTime(new Date());
       const localHeader = new DataView(new ArrayBuffer(30));
       let p=0; function w32(v){localHeader.setUint32(p,v,true); p+=4}
       function w16(v){localHeader.setUint16(p,v,true); p+=2}
-      w32(0x04034b50); // signature
-      w16(20); // version needed
-      w16(0); // flags
-      w16(0); // compression (store)
-      w16(time); w16(date);
-      w32(crc>>>0);
-      w32(data.length); w32(data.length);
+      w32(0x04034b50); w16(20); w16(0); w16(0); w16(time); w16(date);
+      w32(crc>>>0); w32(data.length); w32(data.length);
       w16(enc.encode(name).length); w16(0);
       const headerBytes = new Uint8Array(localHeader.buffer);
       const rec = { name, offset, crc: crc>>>0, size: data.length, time, date };
@@ -441,22 +535,9 @@ el('btnBatch').addEventListener('click', async ()=>{
   }
   const table = (()=>{ let t=new Uint32Array(256); for(let i=0;i<256;i++){ let c=i; for(let k=0;k<8;k++) c = c&1?0xedb88320^(c>>>1):c>>>1; t[i]=c>>>0; } return t; })();
 
-  // Map each file through the same pipeline
-  const mime = el('format').value; const q = parseFloat(el('quality').value||'0.8'); const bg = el('bg').value||'#ffffff';
-  const lock = el('lockRatio').checked; const W = parseInt(el('width').value,10); const H = parseInt(el('height').value,10);
-
-  const outFiles = [];
-  for(const f of files){
-    const img = await createImageBitmap(f);
-    const src = document.createElement('canvas'); src.width = img.width; src.height = img.height; src.getContext('2d').drawImage(img,0,0);
-    const resized = drawResized(src, isNaN(W)?0:W, isNaN(H)?0:H, lock);
-    const blob = await exportBlob(resized, mime, q, bg);
-    const ext = mime==='image/png'? 'png' : mime==='image/jpeg'? 'jpg' : 'webp';
-    const name = f.name.replace(/\.[^.]+$/, '') + `.${ext}`;
-    outFiles.push(new File([blob], name, {type: blob.type}));
-  }
-  const zip = await zipBlob(outFiles);
-  downloadBlob(zip, 'export-images.zip');
+  const zip = await zipBlob(pwaFiles);
+  downloadBlob(zip, 'pwa-icons.zip');
+  el('outInfo').textContent = `${pwaFiles.length} fichiers générés (11 PNG + favicon.ico) → ${fmtBytes(zip.size)}`;
 });
 </script>
 </body>
